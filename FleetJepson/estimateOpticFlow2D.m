@@ -33,8 +33,12 @@ function [Dx Dy] = estimateOpticFlow2D(ImgSeq, opt)
 %   Fleet, D.J. and Jepson, A.D. (1989). Computation of normal velocity 
 %       from local phase information. In Proceedings of Computer Vision and 
 %       Pattern Recognition, CVPR'89. 379-386.
+%   These papers do not describe how to combine responses from different 
+%   frequencies and in particular the normalization accross them. Here, I 
+%   weigh estimates by their amplitude, which is later re-normlized to get 
+%   the correct speed (see lines 108 and 131 & 132).
 %
-%   Copyright (C) 2013  Florian Raudies, 01/04/2013, Boston University.
+%   Copyright (C) 2013  Florian Raudies, 05/16/2013, Boston University.
 %   License, GNU GPL, free software, without any warranty.
 
 % Set default values for paraemters of the method.
@@ -69,6 +73,7 @@ dNum        = length(D);
 Kx      = zeros(yNum,xNum,nOri,nTmp); % spatial frequency
 Ky      = zeros(yNum,xNum,nOri,nTmp); % spatial frequency
 Omega   = zeros(yNum,xNum,nOri,nTmp); % temporal frequency
+A       = zeros(yNum,xNum,nOri,nTmp); % amplitude signal
 % Check if the provided sequence contains enough frames.
 tNum    = size(ImgSeq,3);
 if tNum<(kNum+2), 
@@ -100,29 +105,31 @@ for iTmp = 1:nTmp,
         % Compute the spatial derivatives.
         Rx  = imfilter(R, reshape(D, [1 dNum 1]), 'same', 'replicate');
         Ry  = imfilter(R, reshape(D, [dNum 1 1]), 'same', 'replicate');
-        RSqInv = 1./(abs(R) + eps);
+        RInv = 1./(abs(R) + eps);
         % Compute the spatial and temporal phases and add them to the 
         % tested ones. See Fleet & Jepson (1989), Eq. (6) on page 380.
         Kx(:,:,iOri,iTmp)    = (imag(Rx).*real(R) ...
-                               -real(Rx).*imag(R)).*RSqInv + 2*pi*fx;
+                               -real(Rx).*imag(R)).*RInv + 2*pi*fx;
         Ky(:,:,iOri,iTmp)    = (imag(Ry).*real(R) ...
-                               -real(Ry).*imag(R)).*RSqInv + 2*pi*fy;
+                               -real(Ry).*imag(R)).*RInv + 2*pi*fy;
         Omega(:,:,iOri,iTmp) = (imag(Rt).*real(R) ...
-                               -real(Rt).*imag(R)).*RSqInv + 2*pi*ft;
+                               -real(Rt).*imag(R)).*RInv + 2*pi*ft;
+        A(:,:,iOri,iTmp)     = abs(R);
     end
 end
 % Put all constraints into a single dimension.
-Kx      = reshape(Kx,   [yNum xNum nOri*nTmp]);
-Ky      = reshape(Ky,   [yNum xNum nOri*nTmp]);
-Omega   = reshape(Omega,[yNum xNum nOri*nTmp]);
+Kx      = reshape(Kx,    [yNum xNum nOri*nTmp]);
+Ky      = reshape(Ky,    [yNum xNum nOri*nTmp]);
+Omega   = reshape(Omega, [yNum xNum nOri*nTmp]);
+A       = reshape(A,     [yNum xNum nOri*nTmp]);
 % Compute the normal vector.
 LenInv  = 1./(hypot(Kx, Ky) + eps);
-Nx  = +Kx.*LenInv;      % x-component of normal
-Ny  = +Ky.*LenInv;      % y-component of normal
-S   = -Omega.*LenInv;   % speed along normal
-% Compute normal flow. Why do we scale by (2*pi)^3 ?
-Dx  = squeeze(mean(S.*Nx,3))*(2*pi)^3;
-Dy  = squeeze(mean(S.*Ny,3))*(2*pi)^3;
+Nx      = +Kx.*LenInv;      % x-component of normal
+Ny      = +Ky.*LenInv;      % y-component of normal
+S       = -Omega.*LenInv;   % speed along normal
+% Compute normal flow. Noramlization using the amplitude.
+Dx      = squeeze(mean(S.*Nx,3)./mean(A,3));
+Dy      = squeeze(mean(S.*Ny,3)./mean(A,3));
 
 
 function ImgSeq = filterSepGabor(ImgSeq, Gabor)
