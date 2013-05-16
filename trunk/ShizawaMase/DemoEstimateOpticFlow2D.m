@@ -12,7 +12,7 @@ close all
 %   License, GNU GPL, free software, without any warranty.
 % *************************************************************************
 
-% Generate the first two image sequences.
+% Generate the image sequences.
 addpath('./../'); % add root directory to path to access auxiliary functions.
 opt.h       = 128; % Set parameters for stimulus.
 opt.w       = 128;
